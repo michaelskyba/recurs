@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+import os
+import json
+from pathlib import Path
+
+
+def get_fsrs_data_directory():
+    recurs_home = os.getenv("RECURS_HOME")
+    if recurs_home:
+        return Path(recurs_home) / "fsrs-scheduling-data"
+
+    xdg_data_home = os.getenv("XDG_DATA_HOME", Path.home() / ".local/share")
+    return Path(xdg_data_home) / "recurs/fsrs-scheduling-data"
+
+
+def gather_card_ids_from_decks(deck_files):
+    card_ids = set()
+
+    for deck_file_path in deck_files:
+        with open(deck_file_path, "r") as deck_file:
+            lines = deck_file.readlines()
+            for line in lines:
+                # Skip empty lines and comments
+                if "\t" not in line:
+                    continue
+
+                # Split the line to check for front, back, and ID
+                parts = line.strip().split("\t")
+                if len(parts) == 3:  # Initialized card
+                    card_ids.add(parts[2])
+
+    return card_ids
+
+
+# Use the base filename without the .json extension as each card ID
+def gather_metadata_ids(fsrs_data_dir):
+    metadata_ids = set()
+
+    for metadata_file in fsrs_data_dir.glob("*.json"):
+        metadata_ids.add(metadata_file.stem)
+
+    return metadata_ids
+
+
+# Function to identify orphaned metadata and missing metadata
+def check_health(deck_files):
+    fsrs_data_dir = get_fsrs_data_directory()
+    if not fsrs_data_dir.exists():
+        print(f"FSRS data directory '{fsrs_data_dir}' does not exist.")
+        return
+
+    card_ids = gather_card_ids_from_decks(deck_files)
+    metadata_ids = gather_metadata_ids(fsrs_data_dir)
+
+    # Identify orphaned metadata (metadata without corresponding cards)
+    orphaned_metadata_ids = metadata_ids - card_ids
+    missing_metadata_ids = card_ids - metadata_ids
+
+    # Report results
+    if orphaned_metadata_ids:
+        print("Orphaned metadata files (no corresponding card in any deck):")
+        for orphan_id in orphaned_metadata_ids:
+            print(f"{orphan_id}.json")
+    else:
+        print("No orphaned metadata files found.")
+
+    if missing_metadata_ids:
+        print("Card IDs missing metadata:")
+        for missing_id in missing_metadata_ids:
+            print(missing_id)
+    else:
+        print("No card IDs missing metadata found.")
+
+
+# Main entry point for command-line usage
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) < 2:
+        print("Usage: ./deck_health <deck_file_path_1> [<deck_file_path_2> ...]")
+        sys.exit(1)
+
+    deck_files = sys.argv[1:]
+    check_health(deck_files)
