@@ -28,7 +28,7 @@ main.deck: Created 1 new cards
 $ cat main.deck
 This is my deck
 According to the canon, who was it that Claude loved?	Asara	17289698279672662
-$ cat ~/.local/share/recurs/fsrs-scheduling-data/17289698279672662.json
+$ cat ~/.local/share/recurs/scheduling/17289698279672662.json
 {
     "due": "2024-10-15T05:23:47.967279+00:00",
     "stability": 0,

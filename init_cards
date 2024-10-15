@@ -10,10 +10,10 @@ from fsrs import Card
 def get_fsrs_data_directory():
     recurs_home = os.getenv("RECURS_HOME")
     if recurs_home:
-        return Path(recurs_home) / "fsrs-scheduling-data"
+        return Path(recurs_home) / "scheduling"
 
     xdg_data_home = os.getenv("XDG_DATA_HOME", Path.home() / ".local/share")
-    return Path(xdg_data_home) / "recurs/fsrs-scheduling-data"
+    return Path(xdg_data_home) / "recurs/scheduling"
 
 
 def generate_unique_id():
