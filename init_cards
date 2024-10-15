@@ -7,15 +7,6 @@ from pathlib import Path
 from fsrs import Card
 
 
-"""
-Input: A deck file similar to tunnel's format
-<front of card><tab><back of card>
-
-init_cards will created a Recurs ID for each card, and initialize an FSRS
-data JSON entry in $RECURS_HOME/fsrs-scheduling-data
-"""
-
-
 def get_fsrs_data_directory():
     recurs_home = os.getenv("RECURS_HOME")
     if recurs_home:
