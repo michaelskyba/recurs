@@ -14,7 +14,8 @@ A card is a tab-separated value entry, with columns:
 3. Card ID
 
 When manually creating cards, you leave the card ID blank, and then use
-`init_cards` to receive IDs.
+`init_cards` to receive IDs. You can give it an additional numeric argument to
+limit how many new cards to create, which is helpful if your deck is large.
 
 ```sh
 $ echo "This is my deck" > main.deck

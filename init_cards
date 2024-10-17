@@ -3,6 +3,7 @@ import os
 import time
 import json
 import uuid
+import random
 from pathlib import Path
 from fsrs import Card
 
@@ -20,7 +21,7 @@ def generate_unique_id():
     return str(int(time.time() * 1000 * 1000 * 10))
 
 
-def initialize_metadata(deck_file_path):
+def initialize_metadata(deck_file_path, max_cards=None):
     fsrs_data_dir = get_fsrs_data_directory()
     fsrs_data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -30,17 +31,20 @@ def initialize_metadata(deck_file_path):
     with open(deck_file_path, "r") as deck_file:
         lines = deck_file.readlines()
 
-        for line_number, line in enumerate(lines, start=1):
-            # Skip empty lines and comments
-            if "\t" not in line:
-                continue
+        valid_line_indices = [
+            idx for idx, line in enumerate(lines) if len(line.strip().split("\t")) == 2
+        ]
 
+        # If max_cards is specified, randomly select the appropriate number of indices
+        if max_cards is not None:
+            max_cards = min(max_cards, len(valid_line_indices))
+            selected_indices = random.sample(valid_line_indices, max_cards)
+        else:
+            selected_indices = valid_line_indices
+
+        for line_number in selected_indices:
+            line = lines[line_number]
             parts = line.strip().split("\t")
-
-            # Only update uninitialized card
-            if len(parts) != 2:
-                continue
-
             front, back = parts
 
             unique_id = generate_unique_id()
@@ -52,9 +56,9 @@ def initialize_metadata(deck_file_path):
             with open(metadata_path, "w") as metadata_file:
                 json.dump(card.to_dict(), metadata_file, indent=4)
 
-            print(f"Line {line_number}: Created card {unique_id}")
+            print(f"Line {line_number + 1}: Created card {unique_id}")
 
-            lines[line_number - 1] = "\t".join(parts) + "\n"
+            lines[line_number] = "\t".join(parts) + "\n"
             initialized_count += 1
 
     with open(deck_file_path, "w") as deck_file:
@@ -66,9 +70,11 @@ def initialize_metadata(deck_file_path):
 if __name__ == "__main__":
     import sys
 
-    if len(sys.argv) != 2:
-        print("Usage: ./init_cards <deck_file_path>")
+    if len(sys.argv) < 2 or len(sys.argv) > 3:
+        print("Usage: ./init_cards <deck_file_path> [max_cards]")
         sys.exit(1)
 
     deck_file_path = sys.argv[1]
-    initialize_metadata(deck_file_path)
+    max_cards = int(sys.argv[2]) if len(sys.argv) == 3 else None
+
+    initialize_metadata(deck_file_path, max_cards)
