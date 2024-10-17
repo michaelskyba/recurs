@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+import os
+import json
+from pathlib import Path
+from datetime import datetime, timezone, timedelta
+import argparse
+import subprocess
+import tempfile
+import sys
+import random
+
+from fsrs import FSRS, Rating, Card
+
+
+def get_fsrs_data_directory():
+    recurs_home = os.getenv("RECURS_HOME")
+    if recurs_home:
+        return Path(recurs_home) / "scheduling"
+
+    xdg_data_home = os.getenv("XDG_DATA_HOME", Path.home() / ".local/share")
+    return Path(xdg_data_home) / "recurs/scheduling"
+
+
+# Loads the deck file and returns a list of card dictionaries.
+# Each card dictionary contains "front", "back", and "id".
+def load_deck(deck_file_path):
+    cards = []
+
+    with open(deck_file_path, "r") as deck_file:
+        for line in deck_file.readlines():
+            parts = line.strip().split("\t")
+
+            # Skip empty lines, comments, and uninitialized cards
+            if len(parts) < 3:
+                continue
+
+            cards.append(
+                {
+                    "front": parts[0],
+                    "back": parts[1],
+                    "id": parts[2],
+                }
+            )
+
+    return cards
+
+
+# Loads the metadata JSON for a given card ID. Returns an FSRS Card object
+def load_metadata(fsrs_data_dir, card_id):
+    metadata_path = fsrs_data_dir / f"{card_id}.json"
+    with open(metadata_path, "r") as metadata_file:
+        return Card.from_dict(json.load(metadata_file))
+
+
+# Saves the updated Card object back to its JSON metadata file.
+def save_metadata(fsrs_data_dir, card_id, card_obj):
+    metadata_path = fsrs_data_dir / f"{card_id}.json"
+    with open(metadata_path, "w") as metadata_file:
+        json.dump(card_obj.to_dict(), metadata_file, indent=4)
+
+
+# Converts user choice to follow FSRS's Rating enum.
+def rating_from_choice(choice):
+    mapping = {1: Rating.Again, 2: Rating.Hard, 3: Rating.Good, 4: Rating.Easy}
+    assert choice in mapping
+
+    return mapping.get(choice)
+
+
+# Calls the external "review_card" script and retrieves the user's rating
+# through a passed temporary file. This function returns the FSRS rating
+def prompt_review_card(card):
+    with tempfile.NamedTemporaryFile(mode="w+", delete=False) as temp_file:
+        temp_filename = temp_file.name
+
+    subprocess.run(
+        ["./review_card", card["front"], card["back"], card["id"], temp_filename]
+    )
+
+    assert Path(temp_filename).exists()
+    with open(temp_filename, "r") as temp_file:
+        rating_str = temp_file.read().strip()
+
+    os.remove(temp_filename)
+
+    assert rating_str in ["1", "2", "3", "4"]
+    user_choice = int(rating_str)
+
+    return rating_from_choice(user_choice)
+
+
+# Filters and returns a list of due cards based on the lookahead threshold, in
+# random order
+def get_due_cards(cards, fsrs_data_dir, lookahead_threshold):
+    due_cards = []
+
+    for card in cards:
+        card_obj = load_metadata(fsrs_data_dir, card["id"])
+
+        if card_obj.due <= lookahead_threshold:
+            due_cards.append((card, card_obj))
+
+    random.shuffle(due_cards)
+    return due_cards
+
+
+# Reviews a batch of due cards and returns a list of cards that are still due
+# after review.
+def review_cycle(fsrs_scheduler, fsrs_data_dir, due_cards, lookahead_threshold):
+    next_due_cycle = []
+
+    total = len(due_cards)
+    for index, (card, card_obj) in enumerate(due_cards, start=1):
+        rating = prompt_review_card(card)
+        if rating is None:
+            continue  # Skip if invalid rating
+
+        # Review the card using py-fsrs
+        updated_card_obj, review_log = fsrs_scheduler.review_card(card_obj, rating)
+
+        # Save the updated metadata
+        save_metadata(fsrs_data_dir, card["id"], updated_card_obj)
+
+        print(f"review_deck: {card['id']}:{rating} --> {updated_card_obj.due}")
+
+        # Check if the updated card is still due within the lookahead window
+        if updated_card_obj.due <= lookahead_threshold:
+            next_due_cycle.append((card, updated_card_obj))
+
+    return next_due_cycle
+
+
+# Main function to handle the review process with review cycles
+def review_deck(deck_file_path):
+    fsrs_data_dir = get_fsrs_data_directory()
+    assert fsrs_data_dir.exists()
+
+    fsrs_scheduler = FSRS()
+
+    cards = load_deck(deck_file_path)
+    if not cards:
+        print("review_deck: no valid cards found")
+        return
+
+    # Read lookahead time from environment variable or use default, for
+    # calculating the due threshold time
+    LOOKAHEAD_MINUTES = int(os.getenv("RECURS_LOOKAHEAD_MINUTES", "20"))
+    due_threshold = datetime.now(timezone.utc) + timedelta(minutes=LOOKAHEAD_MINUTES)
+
+    # Initialize the first batch of due cards
+    due_cards = get_due_cards(cards, fsrs_data_dir, due_threshold)
+
+    if not due_cards:
+        print("review_deck: no cards due in deck")
+        return
+
+    print(f"review_deck: {len(due_cards)} cards due")
+
+    cycle_number = 1
+    while due_cards:
+        print(f"review_deck: starting review cycle {cycle_number}")
+
+        next_due_cycle = review_cycle(
+            fsrs_scheduler, fsrs_data_dir, due_cards, due_threshold
+        )
+
+        due_cards = next_due_cycle
+        cycle_number += 1
+
+
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: review_deck <deck file>")
+        sys.exit(1)
+
+    deck_file_path = Path(sys.argv[1])
+    assert deck_file_path.exists()
+    review_deck(deck_file_path)
+
+
+if __name__ == "__main__":
+    main()
