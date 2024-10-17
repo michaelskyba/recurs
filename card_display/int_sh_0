@@ -1,0 +1,29 @@
+#!/bin/sh
+front=$1
+back=$2
+card_id=$3
+tmp=$4
+
+if [ -z "$tmp" ]
+then
+	echo "Usage: review_card <front> <back> <card_id> <output_filename>"
+	exit 1
+fi
+
+echo "$front"
+echo "..."
+read -r pause
+
+echo "$back"
+
+while :
+do
+	printf "1-4: "
+	read -r rating
+
+	case "$rating" in
+		1|2|3|4)
+			echo "$rating" > "$tmp"
+			exit ;;
+	esac
+done
