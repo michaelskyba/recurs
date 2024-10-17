@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+import sys
+
+
+def prompt_user(front, back):
+    """
+    Present the card to the user and get their rating.
+    """
+    print("\n---")
+    print(f"Front: {front}")
+    input("Press Enter to reveal the back...")
+    print(f"Back: {back}\n")
+
+    print("Please rate your recall:")
+    print("1) Again (I forgot)")
+    print("2) Hard (I struggled)")
+    print("3) Good (I remembered with some hesitation)")
+    print("4) Easy (I remembered effortlessly)")
+
+    while True:
+        choice = input("Your rating (1-4): ").strip()
+        if choice in ["1", "2", "3", "4"]:
+            return choice
+        else:
+            print("Invalid input. Please enter a number between 1 and 4.")
+
+
+def main():
+    if len(sys.argv) != 5:
+        print("Usage: review_card <front> <back> <card_id> <output_filename>")
+        sys.exit(1)
+
+    front = sys.argv[1]
+    back = sys.argv[2]
+    card_id = sys.argv[3]
+    output_filename = sys.argv[4]
+
+    rating = prompt_user(front, back)
+
+    # Write the rating to the output file
+    with open(output_filename, "w") as output_file:
+        output_file.write(rating + "\n")
+
+
+if __name__ == "__main__":
+    main()
