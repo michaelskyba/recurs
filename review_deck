@@ -3,22 +3,21 @@ import os
 import json
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
-import argparse
 import subprocess
 import tempfile
 import sys
 import random
+import time
 
 from fsrs import FSRS, Rating, Card
 
 
-def get_fsrs_data_directory():
+def get_fsrs_home():
     recurs_home = os.getenv("RECURS_HOME")
     if recurs_home:
-        return Path(recurs_home) / "scheduling"
+        return Path(recurs_home)
 
-    xdg_data_home = os.getenv("XDG_DATA_HOME", Path.home() / ".local/share")
-    return Path(xdg_data_home) / "recurs/scheduling"
+    return os.getenv("XDG_DATA_HOME", Path.home() / ".local/share") / "recurs"
 
 
 # Loads the deck file and returns a list of card dictionaries.
@@ -115,13 +114,21 @@ def review_cycle(fsrs_scheduler, fsrs_data_dir, due_cards, lookahead_threshold):
         if rating is None:
             continue  # Skip if invalid rating
 
-        # Review the card using py-fsrs
-        updated_card_obj, review_log = fsrs_scheduler.review_card(card_obj, rating)
+        # The second return is their log object but I don't think we need it.
+        # Our (timestamp, card id, grade) should be enough to recreate any state
+        # of any card because FSRS is consistent
+        updated_card_obj, _ = fsrs_scheduler.review_card(card_obj, rating)
 
         # Save the updated metadata
         save_metadata(fsrs_data_dir, card["id"], updated_card_obj)
 
         print(f"review_deck: {card['id']}:{rating} --> {updated_card_obj.due}")
+
+        log_path = get_fsrs_home() / "log.txt"
+        with open(log_path, "a") as log_file:
+            log_file.write(
+                f"{int(time.time() * 1000 * 1000 * 10)}\t{card['id']}\t{int(rating)}\n"
+            )
 
         # Check if the updated card is still due within the lookahead window
         if updated_card_obj.due <= lookahead_threshold:
@@ -132,7 +139,7 @@ def review_cycle(fsrs_scheduler, fsrs_data_dir, due_cards, lookahead_threshold):
 
 # Main function to handle the review process with review cycles
 def review_deck(deck_file_path):
-    fsrs_data_dir = get_fsrs_data_directory()
+    fsrs_data_dir = get_fsrs_home() / "scheduling"
     assert fsrs_data_dir.exists()
 
     fsrs_scheduler = FSRS()
